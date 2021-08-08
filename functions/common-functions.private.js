@@ -1,166 +1,118 @@
 const { v4: uuidv4 } = require('uuid');
-const fetch = require('node-fetch');
-const base64 = require('base-64');
 
-const sendChatMessage = (serviceSid, channelSid, chatUserName, body) => {
-    const params = new URLSearchParams();
-    params.append('Body', body);
-    params.append('From', chatUserName);
-    return fetch(
-        `https://chat.twilio.com/v2/Services/${serviceSid}/Channels/${channelSid}/Messages`,
-        {
-        method: 'post',
-        body: params,
-        headers: {
-            'X-Twilio-Webhook-Enabled': 'true',
-            Authorization: `Basic ${base64.encode(
-            `${process.env.ACCOUNT_SID}:${process.env.AUTH_TOKEN}`
-            )}`
-        }
-        }
-    );
+const sendMessage = (channelSid, user, body) => {
+  const client = context.getTwilioClient();
+  
+  try {
+    const response = await client.httpClient.request({
+      method: "POST",
+      uri: `https://chat.twilio.com/v2/Services/${context.CONVERSATION_SERVICE_SID}/Channels/${channelSid}/Messages`,
+      data: {
+        From: user,
+        Body: body,
+        Attributes: `{"ChannelType": "${event.channelType}"}`,
+      },
+      headers: {
+        'X-Twilio-Webhook-Enabled': 'true'
+      },
+      username: context.ACCOUNT_SID,
+      password: context.AUTH_TOKEN
+    });
+    console.log(`Response: ${JSON.stringify(response.body)} ${response.statusCode}`);
+    callback(null, response);
+  } catch (err) {
+    console.log(`[${user}] errored`, err);
+    callback(null, { status: "message error" });
+  }
 }
 
-const getSyncDocData = (client, schema, from, channelName) => {
-    var syncServiceSid = process.env.TWILIO_OTHER_CHANNELS_SYNC_SERVICE_SID;
-    return client.sync
-    .services(syncServiceSid)
-    .documents(`${schema}-${from}-${channelName}`)
-    .fetch()
-    .then(doc => doc)
-    .catch(doc => undefined);
+const getSyncItem = (from, syncMap) => {
+  const client = context.getTwilioClient();
+  const syncItem = await client.sync
+    .services(context.SYNC_SERVICE_SID)
+    .syncMaps(syncMap)
+    .syncMapItems(from)
+    .fetch();
+  
+  return syncItem;
 }
 
-const createNewSyncDoc = (client, channelSid, schema, from, targetName, customChannelName) => {
-    var syncServiceSid = process.env.TWILIO_OTHER_CHANNELS_SYNC_SERVICE_SID;
-    return new Promise((resolve, reject) => {
-      client.sync
-      .services(syncServiceSid)
-      .documents
-      .create({
-        uniqueName: `${schema}-${from}-${customChannelName}`,
+const createSyncItem = (channelSid, from, targetName, customChannelName) => {
+  const syncMapName = customChannelName;
+  const client = context.getTwilioClient();
+  const syncItem = await client.sync
+      .services(context.SYNC_SERVICE_SID)
+      .syncMaps(syncMapName)
+      .syncMapItems.create({
+        key: from,
         data: {
           channelSid: channelSid,
           targetName: targetName
         },
-        ttl: 864000
-      })
-      .then(doc => { resolve(doc); })
-      .catch(error => {
-        console.log(error);
-        reject(error);
+        ttl: 864000,
       });
-    });
+  
+  return syncItem;
 }
 
-const createNewChannel = (client, flexFlowSid, customChannelName, chatUserName, schema, from, to) => {
-    var chatServiceSid = process.env.TWILIO_CHAT_SERVICE_SID;
+const createNewChannel = (flexFlowSid, customChannelName, chatUserName, from, to) => {
+  const DOMAIN = ( context.DOMAIN_NAME === "localhost:3000" ) ? `dawong.au.ngrok.io` : context.DOMAIN_NAME;
+  const chatServiceSid = process.env.CHAT_SERVICE_SID;
+  const client = context.getTwilioClient();
   
-    return new Promise((resolve) => {
-    client.flexApi.channel
-      .create({
-        flexFlowSid: flexFlowSid,
-        identity: chatUserName,
-        chatUserFriendlyName: from,
-        chatFriendlyName: from,
-        target: chatUserName,
-        preEngagementData: {
-          friendlyName: from
-        }
-      })
-      .then(channel => {
-        return client.chat
-        .services(chatServiceSid)
-        .channels(channel.sid)
-        .fetch();
-      })
-      .then(channel => {  
-        var newAttributes = JSON.parse(channel.attributes);
-        var fromIdentity = newAttributes.from;
-        newAttributes.from = from;
-  
-        return client.chat
-          .services(chatServiceSid)
-          .channels(channel.sid)
-          .update({ attributes: JSON.stringify(newAttributes) })
-          .then(() => client.chat
-            .services(chatServiceSid)
-            .channels(channel.sid)
-            .webhooks.create({
-              type: 'webhook',
-              'configuration.method': 'POST',
-              'configuration.url': `https://${process.env.DOMAIN_BASE}/${customChannelName}/outbound-message-webhook` +
-              `?ChannelSid=${channel.sid}` +
-              `&Schema=${encodeURIComponent(schema)}` +
-              `&FromIdentity=${encodeURIComponent(to)}` +
-              `&ToIdentity=${encodeURIComponent(fromIdentity)}` +
-              `&ToNumber=${encodeURIComponent(from)}`,
-              'configuration.filters': ['onMessageSent']
-            })
-          )
-          .then(() => client.chat
-            .services(chatServiceSid)
-            .channels(channel.sid)
-            .webhooks.create({
-              type: 'webhook',
-              'configuration.method': 'POST',
-              'configuration.url': `https://${process.env.DOMAIN_BASE}/channel-update-webhook` +
-              `?Schema=${encodeURIComponent(schema)}` +
-              `&ToNumber=${encodeURIComponent(from)}` +
-              `&CustomChannelName=whatsapp`,
-              'configuration.filters': ['onChannelUpdated']
-            })
-          )
-      })
-      .then(webhook => {
-        resolve({ channelSid: webhook.channelSid, newSyncDocRequired: true });
-      })
-      .catch(error => {
-        console.log(error);
-      });
+  const flexChannel = await client.flexApi.channel.create({
+      flexFlowSid: flexFlowSid,
+      identity: chatUserName,
+      chatUserFriendlyName: from,
+      chatFriendlyName: from,
+      target: chatUserName,
+      preEngagementData: {
+        friendlyName: from
+      }
     });
+  
+  const outboundMessageWebhookUrl = `https://${DOMAIN}/${customChannelName}/outbound-message-webhook` +
+    `?ChannelSid=${channel.sid}` +
+    `&FromIdentity=${encodeURIComponent(to)}` +
+    `&ToIdentity=${encodeURIComponent(fromIdentity)}` +
+    `&ToNumber=${encodeURIComponent(from)}`;
+  const respWebhook = await client.chat.services(chatServiceSid).channels(flexChannel.sid).webhooks.create({
+    type: 'webhook',
+    'configuration.method': 'POST',
+    'configuration.url': webhookUrl,
+    'configuration.filters': ['onMessageSent']
+  });
+
+  const channelUpdateWebhookUrl = `https://${DOMAIN}/channel-update-webhook` +
+    `?ToNumber=${encodeURIComponent(from)}` +
+    `&CustomChannelName=${customChannelName}`;
+  
+  const respWebhook = await client.chat.services(chatServiceSid).channels(flexChannel.sid).webhooks.create({
+    type: 'webhook',
+    'configuration.method': 'POST',
+    'configuration.url': webhookUrl,
+    'configuration.filters': ['onChannelUpdated']
+  });
 }
 
-exports.customChannelInboundMessage = function(client, schemaDetails, customChannelName, schema, from, to, body) {
-    var channelTargetName = `${schema}-${from}-${uuidv4()}`;
+exports.inboundMessage = function (customChannelName, from, to, body) {
+  const client = context.getTwilioClient();
+  var channelTargetName = `${schema}-${from}-${uuidv4()}`;
+  const syncItem = await getSyncItem(client, from, customChannelName);
 
-    return new Promise((resolve, reject) => {
-        getSyncDocData(client, schema, from, customChannelName)
-        .then(syncDoc => {
-            if(syncDoc === undefined){
-                return createNewChannel(
-                client,
-                schemaDetails.flexFlowSid,
-                customChannelName,
-                channelTargetName,
-                schema,
-                from,
-                to
-                );
-            } else {
-                return new Promise((resolve) => { resolve({syncDoc: syncDoc, newSyncDocRequired: false }); });
-            }
-        })
-        .then(syncDocData => {
-            if(syncDocData.newSyncDocRequired){
-                return createNewSyncDoc(client, syncDocData.channelSid, schema, from, channelTargetName, customChannelName)
-            } else {
-                console.log(`Found sync doc ${syncDocData.syncDoc.sid}`);
-                return new Promise((resolve) => { resolve(syncDocData.syncDoc); });
-            }
-        })
-        .then(syncDoc => {
-            return sendChatMessage(
-                process.env.TWILIO_CHAT_SERVICE_SID,
-                syncDoc.data.channelSid,
-                syncDoc.data.targetName,
-                body);
-        })
-        .then(() => {
-            resolve(true);
-        })
-        .catch(error => {
-            reject(error);
-        });
-    });
+  if(syncItem === undefined){
+      const channel = await createNewChannel(
+        customChannelName,
+        channelTargetName,
+        from,
+        to
+    );
+
+    syncItem = await createSyncItem(channel.channelSid, from, channelTargetName, customChannelName)
+  }
+
+  const message = await sendMessage(
+    syncItem.channelSid,
+    syncItem.targetName,
+    body);
 }
