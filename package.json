@@ -1,0 +1,26 @@
+{
+  "name": "custom-channels-middleware",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "twilio-run",
+    "deploydev": "twilio serverless:deploy --env=.env --account-sid=AC74ee03bd634b0883c98646eb51948fa9 --cwd=. --config=.twilio-functions",
+    "deployprod": "twilio serverless:deploy --env=.env.prod --account-sid=AC21a79e0b4e731061a89f196b42dff8e4 --cwd=. --config=.twilio-functions.prod"
+  },
+  "dependencies": {
+    "base-64": "^1.0.0",
+    "dotenv": "^8.2.0",
+    "node-fetch": "^2.6.1",
+    "twilio": "^3.50.0",
+    "twilio-flex-token-validator": "^1.5.4",
+    "url": "^0.11.0",
+    "uuid": "^8.3.1"
+  },
+  "devDependencies": {
+    "twilio-run": "^2.6.0"
+  },
+  "engines": {
+    "node": "10"
+  }
+}
