@@ -1,5 +1,6 @@
 {
     "cSpell.ignoreWords": [
         "uuidv"
-    ]
+    ],
+    "debug.node.autoAttach": "on"
 }

@@ -1,36 +1,50 @@
-exports.handler = function(context, event, callback) {
-  const client = context.getTwilioClient();
-  var env = process.env.SERVERLESS_ENVIRONMENT;
-  var chatServiceSid = process.env.TWILIO_CHAT_SERVICE_SID;
+var request = require('request');
 
-  var schema = event.Schema;
-  var customChannelName = "whatsapp";
-  var fromIdentity = event.FromIdentity;
-  var fromNumber = event.From;
-  var toIdentity = event.ToIdentity;
-  var toNumber = event.ToNumber;
+exports.handler = function (context, event, callback) {
+  var customChannelName = "twitter";
+  var from = event.From;
+  var to = event.To;
   var body = event.Body;
-  var channelSid = event.ChannelSid;
-  
-  const response = new Twilio.Response();
-  if(toIdentity !== fromIdentity){
-    client.chat
-        .messages
-        .create({body: body, from: fromIdentity, to: toNumber})
-        .then(message => {
-          console.log(message.sid);
 
-          response.setStatusCode(200);
-          callback(null, response);
-        });
-    })
-    .catch(error => {
-      response.setStatusCode(500);
-      response.setBody(`outbound message error ${error}`);
+  if (from !== to && from !== 'system' && from !== '15425351') {
+    const oAuthConfig = {
+      token: context.TWITTER_API_KEY,
+      token_secret: context.TWITTER_API_KEY_SECRET,
+      consumer_key: context.TWITTER_CONSUMER_KEY,
+      consumer_secret: context.TWITTER_CONSUMER_SECRET,
+    };
+
+    const requestConfig = {
+      url: 'https://api.twitter.com/1.1/direct_messages/events/new.json',
+      oauth: oAuthConfig,
+      json: {
+        event: {
+          type: 'message_create',
+          message_create: {
+            target: {
+              recipient_id: 15425351,
+            },
+            message_data: {
+              text: body,
+            },
+          },
+        },
+      },
+    };
+
+    request.post(requestConfig, function (err, httpResponse, body) {
+      if (err) {
+        const response = new Twilio.Response();
+        response.setStatusCode(500);
+        response.setBody(`error ${error}`);
+        callback(null, response);
+      }
+      const response = new Twilio.Response();
+      response.setStatusCode(200);
+      response.setBody(`success`);
       callback(null, response);
-    })
-  } else {
-    response.setStatusCode(200);
-    callback(null, response);
+    });
   }
+
+  
 };
