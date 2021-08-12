@@ -1,13 +1,14 @@
 import React from 'react';
 import { VERSION } from '@twilio/flex-ui';
 import { FlexPlugin } from 'flex-plugin';
+import { TwitterIcon, TwitterIconActive } from './Icons/TwitterIcons';
+import { Icon } from '@twilio/flex-ui';
 
-import CustomTaskListContainer from './components/CustomTaskList/CustomTaskList.Container';
-import reducers, { namespace } from './states';
+// import reducers, { namespace } from './states';
 
-const PLUGIN_NAME = 'TwitterCustomChannelPlugin';
+const PLUGIN_NAME = 'PluginTwitterCustomChannelPlugin';
 
-export default class TwitterCustomChannelPlugin extends FlexPlugin {
+export default class PluginTwitterCustomChannelPlugin extends FlexPlugin {
   constructor() {
     super(PLUGIN_NAME);
   }
@@ -20,27 +21,19 @@ export default class TwitterCustomChannelPlugin extends FlexPlugin {
    * @param manager { import('@twilio/flex-ui').Manager }
    */
   init(flex, manager) {
-    this.registerReducers(manager);
 
-    const options = { sortOrder: -1 };
-    flex.AgentDesktopView
-      .Panel1
-      .Content
-      .add(<CustomTaskListContainer key="TwitterCustomChannelPlugin-component" />, options);
-  }
+    const definition = flex.DefaultTaskChannels.createChatTaskChannel(
+      'twitter',
+      (task) => {
+        return task.attributes.channelType === 'twitter';
+      },
+      <Icon icon={<TwitterIcon />} />,
+      <Icon icon={<TwitterIconActive />} />,
+      '#6CADDE' // Twitter Blue
+    );
 
-  /**
-   * Registers the plugin reducers
-   *
-   * @param manager { Flex.Manager }
-   */
-  registerReducers(manager) {
-    if (!manager.store.addReducer) {
-      // eslint: disable-next-line
-      console.error(`You need FlexUI > 1.9.0 to use built-in redux; you are currently on ${VERSION}`);
-      return;
-    }
+    // register the definition
 
-    manager.store.addReducer(namespace, reducers);
+    flex.TaskChannels.register(definition);
   }
 }
