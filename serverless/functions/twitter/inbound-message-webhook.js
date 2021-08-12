@@ -8,7 +8,7 @@ exports.handler = async function (context, event, callback) {
   if (event.crc_token) {
     console.log(`Verification challenge received`);
     try {
-      if (!validateSignature(event)) {
+      if (!validateSignature(event.crc_token)) {
         console.error('Cannot validate webhook signature');
         return;
       }
@@ -25,15 +25,22 @@ exports.handler = async function (context, event, callback) {
   }
 
   const message = event.direct_message_events.shift();
-  const senderScreenName = event.users[message.message_create.sender_id].screen_name;
+  const userFriendlyName =
+    event.users[message.message_create.sender_id].screen_name;
 
   // Filter out empty messages or non-message events
-  if (typeof message === 'undefined' || typeof message.message_create === 'undefined') {
+  if (
+    typeof message === 'undefined' ||
+    typeof message.message_create === 'undefined'
+  ) {
     return callback(null, {});
   }
 
   // Filter out messages created by the the authenticating users (to avoid sending messages to oneself)
-  if (message.message_create.sender_id === message.message_create.target.recipient_id) {
+  if (
+    message.message_create.sender_id ===
+    message.message_create.target.recipient_id
+  ) {
     return callback(null, {});
   }
 
@@ -42,17 +49,18 @@ exports.handler = async function (context, event, callback) {
     return callback(null, {});
   }
 
-  var customChannelName = "twitter";
+  var customChannelName = 'twitter';
   var from = message.message_create.sender_id;
   var to = message.message_create.target.recipient_id;
   var body = message.message_create.message_data.text;
-  
+
   commonFunc
     .inboundMessage(
       context,
       customChannelName,
       from,
       to,
+      userFriendlyName,
       body
     )
     .then(() => {
@@ -65,7 +73,7 @@ exports.handler = async function (context, event, callback) {
       response.setBody(`error ${error}`);
       return callback(null, response);
     });
-}
+};
 
 async function validateWebhook(token) {
   const responseToken = crypto
@@ -75,12 +83,12 @@ async function validateWebhook(token) {
   return { response_token: `sha256=${responseToken}` };
 }
 
-async function validateSignature(body) {
+async function validateSignature(token) {
   const signature =
     'sha256=' +
     crypto
       .createHmac('sha256', process.env.TWITTER_CONSUMER_SECRET)
-      .update(body.crc_token)
+      .update(token)
       .digest('base64');
 
   return signature;

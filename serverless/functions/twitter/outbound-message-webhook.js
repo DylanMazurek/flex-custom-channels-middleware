@@ -1,12 +1,21 @@
 var request = require('request');
 
 exports.handler = function (context, event, callback) {
-  var customChannelName = "twitter";
   var from = event.From;
   var to = event.To;
   var body = event.Body;
 
-  if (from !== to && from !== 'system' && from !== '15425351') {
+  var onlyReplyTo =
+    context.ONLY_REPLY_TO_DEBUG !== null
+      ? context.ONLY_REPLY_TO_DEBUG.split(',')
+      : null;
+
+  if (
+    from.split('-')[0] !== to &&
+    from !== 'system' &&
+    onlyReplyTo !== null &&
+    onlyReplyTo.indexOf(to) !== -1
+  ) {
     const oAuthConfig = {
       token: context.TWITTER_API_KEY,
       token_secret: context.TWITTER_API_KEY_SECRET,
@@ -22,7 +31,7 @@ exports.handler = function (context, event, callback) {
           type: 'message_create',
           message_create: {
             target: {
-              recipient_id: 15425351,
+              recipient_id: to,
             },
             message_data: {
               text: body,
@@ -37,14 +46,13 @@ exports.handler = function (context, event, callback) {
         const response = new Twilio.Response();
         response.setStatusCode(500);
         response.setBody(`error ${error}`);
-        callback(null, response);
+        return callback(null, response);
       }
-      const response = new Twilio.Response();
-      response.setStatusCode(200);
-      response.setBody(`success`);
-      callback(null, response);
     });
+  } else {
+    const response = new Twilio.Response();
+    response.setStatusCode(200);
+    response.setBody(`success`);
+    return callback(null, response);
   }
-
-  
 };
